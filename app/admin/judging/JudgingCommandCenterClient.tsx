@@ -1,0 +1,65 @@
+"use client";
+
+import Link from "next/link";
+import { useMemo, useState, useTransition } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import type { CommandCenterData } from "@/lib/judging-command-center";
+
+function formatDate(value: string | null) { return value ? new Date(value).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) : "—"; }
+function stateLabel(value: string) { return value.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase()); }
+function toneFor(value: string) { return value === "Completed" || value === "submitted" || value === "frozen" ? "success" : value === "Reviewing" || value === "draft" || value === "reopened" ? "warning" : value === "Unavailable" || value === "removed" ? "danger" : "default"; }
+
+export default function JudgingCommandCenterClient({ data }: { data: CommandCenterData }) {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const requestedSubmission = searchParams.get("submission");
+  const requestedJudge = searchParams.get("judge");
+  const requestedAssignmentId = searchParams.get("assignment");
+  const requestedAssignment = requestedAssignmentId
+    ? data.assignments.find((row) => row.id === requestedAssignmentId && row.state === "active")
+    : requestedSubmission
+    ? data.assignments.find((row) => row.submissionId === requestedSubmission && row.state === "active")
+    : requestedJudge
+      ? data.assignments.find((row) => row.judgeId === requestedJudge && row.state === "active")
+      : null;
+  const [query, setQuery] = useState(requestedSubmission ?? "");
+  const [filter, setFilter] = useState("all");
+  const [selected, setSelected] = useState<string | null>(requestedAssignment?.id ?? null);
+  const [isPending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+  const selectedAssignment = data.assignments.find((row) => row.id === selected) || null;
+  const visibleSubmissions = useMemo(() => data.submissions.filter((row) => {
+    const haystack = `${row.projectTitle} ${row.teamName} ${row.institution} ${row.id}`.toLowerCase();
+    if (query && !haystack.includes(query.toLowerCase())) return false;
+    if (filter === "needs" && row.missing === 0) return false;
+    if (filter === "draft" && row.drafts === 0) return false;
+    if (filter === "complete" && row.missing > 0) return false;
+    return true;
+  }), [data.submissions, filter, query]);
+  const operate = (payload: Record<string, unknown>) => startTransition(async () => {
+    setError(null);
+    const response = await fetch("/api/admin/judging", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(payload) });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) { setError(typeof result.error === "string" ? result.error : "The operation could not be completed."); return; }
+    router.refresh();
+  });
+  const progress = data.metrics.completionPercent;
+  return <>
+    <header className="judging-command-header">
+      <div><p className="eyebrow">Operations · {data.event?.name || "No active event"}</p><h1>Judging command center</h1><p>See what needs attention, keep assignments moving, and close judging with confidence.</p></div>
+      <div className={`judging-event-status ${data.event?.isFrozen ? "is-frozen" : ""}`}><span className="status-dot" aria-hidden="true" />{data.event?.isFrozen ? "Frozen" : "Open"}<small>{data.event?.judgingDeadline ? `Deadline ${formatDate(data.event.judgingDeadline)}` : "No deadline configured"}</small></div>
+    </header>
+    <section className="judging-metric-grid" aria-label="Judging summary">
+      {[["Submissions", data.metrics.submissions], ["Required evaluations", data.metrics.requiredEvaluations], ["Fully evaluated", data.metrics.fullyEvaluated], ["Not started", data.metrics.notStarted], ["Draft evaluations", data.metrics.drafts], ["Submitted evaluations", data.metrics.submitted], ["Frozen evaluations", data.metrics.frozen], ["Reopened evaluations", data.metrics.reopened], ["Missing evaluations", data.metrics.missing], ["Judges with remaining work", data.metrics.judgesWithRemaining], ["Competition health", data.health.state], ["Completion", `${progress}%`]].map(([label, value]) => <div className="judging-metric" key={String(label)}><span>{label}</span><strong>{value}</strong></div>)}
+    </section>
+    <section className="judging-progress-grid" aria-label="Judging progress">
+      <div className="judging-progress-card"><div className="judging-section-heading"><div><p className="eyebrow">Competition health</p><h2>{data.health.state}</h2><p className="judging-muted">{data.health.reasons.length ? data.health.reasons.join(" · ") : "No blocking conditions detected."}</p></div><strong>{progress}%</strong></div><div className="judging-progress-bar"><span style={{ width: `${progress}%` }} /></div><div className="judging-progress-foot"><span>{data.metrics.submitted + data.metrics.frozen} of {data.metrics.requiredEvaluations} evaluations submitted or frozen</span><span>{data.metrics.averageMinutes === null ? "No timing data yet" : `Avg. ${data.metrics.averageMinutes} min to evaluate`}</span></div></div>
+      <div className="judging-attention-card"><div className="judging-section-heading"><div><p className="eyebrow">Needs attention</p><h2>Keep the queue moving</h2></div><span className="badge badge-warning">{data.attention.length}</span></div>{data.attention.length ? <ul>{data.attention.slice(0, 4).map((item) => <li key={item.id}><span className={`attention-mark ${item.tone}`} aria-hidden="true" /><div><strong>{item.label}</strong><span>{item.detail}</span></div><Link className="btn btn-ghost btn-sm" href={item.href}>Open</Link></li>)}</ul> : <p className="judging-muted">Nothing is blocked right now.</p>}</div>
+    </section>
+    <section className="judging-section"><div className="judging-section-heading"><div><p className="eyebrow">Workload</p><h2>Judges</h2></div><span className="judging-muted">{data.judges.length} judge profiles</span></div><div className="judging-table-wrap"><table className="judging-table"><thead><tr><th>Judge</th><th>Assigned</th><th>Not started</th><th>Draft</th><th>Submitted</th><th>Frozen</th><th>Remaining</th><th>Last activity</th><th>Status</th></tr></thead><tbody>{data.judges.map((judge) => <tr key={judge.id}><td><strong>{judge.name}</strong><small>{judge.institution}</small></td><td>{judge.assigned}</td><td>{judge.notStarted}</td><td>{judge.drafts}</td><td>{judge.completed - judge.frozen}</td><td>{judge.frozen}</td><td>{judge.remaining}</td><td>{formatDate(judge.lastActivity)}</td><td><span className={`status-chip ${toneFor(judge.status)}`}>{judge.status}</span></td></tr>)}</tbody></table></div></section>
+    <section className="judging-section"><div className="judging-section-heading judging-section-heading-wrap"><div><p className="eyebrow">Portfolio</p><h2>Submissions</h2></div><div className="judging-filters"><label className="sr-only" htmlFor="judging-search">Search projects, teams, judges, institutions, or IDs</label><input id="judging-search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search projects, teams, IDs" /><select aria-label="Filter submissions" value={filter} onChange={(event) => setFilter(event.target.value)}><option value="all">All submissions</option><option value="needs">Needs attention</option><option value="draft">Draft evaluations</option><option value="complete">Fully evaluated</option></select></div></div><div className="judging-table-wrap"><table className="judging-table"><thead><tr><th>Project</th><th>Team / institution</th><th>Assigned</th><th>Not started</th><th>Draft</th><th>Submitted</th><th>Frozen</th><th>Conflict</th><th>State</th><th>Action</th></tr></thead><tbody>{visibleSubmissions.map((submission) => <tr key={submission.id}><td><strong>{submission.projectTitle}</strong><small>{submission.id}</small></td><td>{submission.teamName}<small>{submission.institution}</small></td><td>{submission.assigned}</td><td>{submission.notStarted}</td><td>{submission.drafts}</td><td>{submission.completed - submission.frozen}</td><td>{submission.frozen}</td><td>{submission.conflict ? "Review" : "—"}</td><td><span className={`status-chip ${submission.missing === 0 && submission.assigned > 0 ? "success" : "warning"}`}>{submission.missing === 0 && submission.assigned > 0 ? "Complete" : "In progress"}</span></td><td><Link className="btn btn-secondary btn-sm" href={`/admin/dashboard/submissions?submission=${encodeURIComponent(submission.id)}`}>Open workspace</Link></td></tr>)}</tbody></table>{visibleSubmissions.length === 0 && <div className="judging-empty">No submissions match this view.</div>}</div></section>
+    <section className="judging-section"><div className="judging-section-heading"><div><p className="eyebrow">Operations</p><h2>Assignment inspector</h2></div><span className="judging-muted">Select a review below</span></div><div className="judging-assignment-grid">{data.assignments.filter((row) => row.state === "active").slice(0, 24).map((assignment) => <button className={`judging-assignment-card ${selected === assignment.id ? "selected" : ""}`} key={assignment.id} onClick={() => setSelected(assignment.id)}><span>{assignment.judgeName}</span><strong>{assignment.projectTitle}</strong><small>{stateLabel(assignment.evaluation)} · {formatDate(assignment.lastSaved)}</small></button>)}</div>{selectedAssignment && <aside className="judging-inspector" aria-label="Assignment inspector"><div><p className="eyebrow">Assignment inspector</p><h3>{selectedAssignment.projectTitle}</h3><p>{selectedAssignment.judgeName} · {stateLabel(selectedAssignment.evaluation)}</p></div><dl><div><dt>Last save</dt><dd>{formatDate(selectedAssignment.lastSaved)}</dd></div><div><dt>Private notes</dt><dd>{selectedAssignment.privateNotes ? "Present" : "None"}</dd></div><div><dt>Conflict</dt><dd>{stateLabel(selectedAssignment.conflictStatus)}</dd></div></dl><div className="judging-inspector-actions"><button className="btn btn-secondary btn-sm" disabled={isPending || selectedAssignment.evaluation === "frozen"} onClick={() => operate({ operation: "freeze_evaluation", assignmentId: selectedAssignment.id })}>Freeze evaluation</button><button className="btn btn-secondary btn-sm" disabled={isPending || selectedAssignment.evaluation !== "frozen"} onClick={() => operate({ operation: "reopen_evaluation", assignmentId: selectedAssignment.id, reason: "Reopened for organizer follow-up" })}>Reopen</button><button className="btn btn-secondary btn-sm" disabled={isPending} onClick={() => operate({ operation: "freeze_submission", assignmentId: selectedAssignment.id })}>Freeze submission</button><button className="btn btn-secondary btn-sm" disabled={isPending} onClick={() => { const reason = window.prompt("Reason for removing this assignment?"); if (reason !== null) operate({ operation: "remove_assignment", assignmentId: selectedAssignment.id, reason }); }}>Remove assignment</button><label className="judging-inspector-field">Conflict status<select aria-label="Conflict status" value={selectedAssignment.conflictStatus} disabled={isPending} onChange={(event) => operate({ operation: "set_conflict", assignmentId: selectedAssignment.id, conflictStatus: event.target.value })}><option value="clear">Clear</option><option value="declared">Declared</option><option value="recused">Recused</option><option value="withdrawn">Withdrawn</option><option value="replacement_required">Replacement required</option></select></label><label className="judging-inspector-field">Replacement judge<select aria-label="Replacement judge" defaultValue="" disabled={isPending}><option value="">Choose judge</option>{data.judges.filter((judge) => judge.id !== selectedAssignment.judgeId).map((judge) => <option value={judge.id} key={judge.id}>{judge.name}</option>)}</select></label><button className="btn btn-secondary btn-sm" disabled={isPending} onClick={(event) => { const select = event.currentTarget.previousElementSibling?.querySelector("select") as HTMLSelectElement | null; const replacementJudgeId = select?.value; if (!replacementJudgeId) return; if (window.confirm("Replace this assignment? The original record and history will be preserved.")) operate({ operation: "reassign", assignmentId: selectedAssignment.id, replacementJudgeId }); }}>Reassign</button></div></aside>}</section>
+    {error && <p className="judging-operation-error" role="alert">{error}</p>}
+    <section className="judging-section judging-activity"><div className="judging-section-heading"><div><p className="eyebrow">Audit trail</p><h2>Recent operations</h2></div><span className="judging-muted">Human-readable, safe summaries</span></div>{data.activity.length ? <ol>{data.activity.slice(0, 8).map((item) => <li key={item.id}><span className="activity-marker" aria-hidden="true" /><div><strong>{stateLabel(item.label)}</strong><time>{formatDate(item.createdAt)}</time></div></li>)}</ol> : <p className="judging-muted">No judging activity recorded yet.</p>}</section>
+  </>;
+}

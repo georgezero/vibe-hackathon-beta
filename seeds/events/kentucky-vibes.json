@@ -1,0 +1,40 @@
+{
+  "seedVersion": "e0.0.1",
+  "eventId": "evt_kentucky_vibes",
+  "slug": "kentucky-vibes",
+  "displayName": "Kentucky Vibes Hackathon",
+  "seed": 20260802,
+  "dates": {
+    "start": "2026-07-30T12:00:00Z",
+    "submissionDeadline": "2026-08-01T12:00:00Z",
+    "judgingDeadline": "2026-08-03T12:00:00Z"
+  },
+  "judging": {
+    "requiredEvaluations": 3,
+    "criteria": [
+      "problem_selection",
+      "product_usefulness",
+      "functionality",
+      "ux_design",
+      "ai_collaboration",
+      "originality",
+      "maintainability",
+      "presentation_clarity"
+    ],
+    "scoreRange": [1, 10]
+  },
+  "awards": [
+    "Grand Prize",
+    "Runner-up",
+    "Honorable Mention",
+    "Innovation Award",
+    "Technical Excellence"
+  ],
+  "publication": { "defaultState": "calculated", "published": false },
+  "workspace": { "nativeChat": true, "chatAllowlist": [], "retention": "synthetic-fixture-only" },
+  "profiles": {
+    "small": { "teams": 10, "users": 25, "judges": 6, "completedEvaluations": 25 },
+    "realistic": { "teams": 75, "users": 150, "judges": 30, "completedEvaluations": 250 },
+    "stress": { "teams": 100, "users": 200, "judges": 50, "completedEvaluations": 300 }
+  }
+}

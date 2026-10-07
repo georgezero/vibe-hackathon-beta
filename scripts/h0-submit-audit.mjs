@@ -1,0 +1,30 @@
+import { chromium } from "playwright";
+import Database from "better-sqlite3";
+const base = process.env.H0_BASE_URL || "https://localhost:3270";
+const shot = process.env.H0_SCREENSHOT_DIR || "docs/participants/screenshots/h0";
+const db = new Database(process.env.H0_DB);
+const row = db.prepare("select edit_token as token from submissions where event_id='evt_kentucky_vibes' and status='draft' order by id limit 1").get();
+db.close();
+if (!row?.token) throw new Error("No draft fixture available");
+const browser = await chromium.launch({ headless: true });
+const context = await browser.newContext({ ignoreHTTPSErrors: true, viewport: { width: 1440, height: 1000 } });
+const page = await context.newPage();
+await page.goto(`${base}/submit/${encodeURIComponent(row.token)}/preview`, { waitUntil: "domcontentloaded" });
+await page.waitForLoadState("networkidle").catch(() => {});
+await page.screenshot({ path: `${shot}/h0-desktop-submit.png`, fullPage: false });
+const button = page.getByRole("button", { name: /Submit for judging/i }).first();
+if (await button.count()) {
+  await button.click();
+  await page.screenshot({ path: `${shot}/h0-desktop-confirmation.png`, fullPage: false });
+  const dialog = page.getByRole("dialog");
+  console.log(JSON.stringify({ heading: (await page.locator("h1").first().textContent().catch(() => ""))?.trim() || "", dialog: (await dialog.textContent().catch(() => ""))?.slice(0, 500), focus: await page.evaluate(() => ({ role: document.activeElement?.getAttribute("role"), text: document.activeElement?.textContent?.trim() })) }, null, 2));
+} else console.log(JSON.stringify({ heading: (await page.locator("h1").first().textContent().catch(() => ""))?.trim() || "", submitAvailable: false }, null, 2));
+const mobile = await browser.newContext({ ignoreHTTPSErrors: true, viewport: { width: 390, height: 844 } });
+const mobilePage = await mobile.newPage();
+await mobilePage.goto(`${base}/submit/${encodeURIComponent(row.token)}/preview`, { waitUntil: "domcontentloaded" });
+await mobilePage.waitForLoadState("networkidle").catch(() => {});
+await mobilePage.screenshot({ path: `${shot}/h0-mobile-submit.png`, fullPage: false });
+const mobileButton = mobilePage.getByRole("button", { name: /Submit for judging/i }).first();
+if (await mobileButton.count()) { await mobileButton.click(); await mobilePage.screenshot({ path: `${shot}/h0-mobile-confirmation.png`, fullPage: false }); }
+await mobile.close();
+await browser.close();

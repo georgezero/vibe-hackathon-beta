@@ -1,0 +1,3 @@
+import { execFileSync } from "node:child_process";
+import { CANONICAL_DB, inspectDatabase, verifySummary } from "./common";
+try { const summary = inspectDatabase(CANONICAL_DB); verifySummary(summary); let service: unknown = null; try { service = execFileSync("systemctl", ["--user", "show", "vibe-hackathon.service", "--property=MainPID,ExecMainStartTimestamp,NRestarts,ActiveState", "--no-pager"], { encoding: "utf8" }).trim(); } catch {} console.log(JSON.stringify({ canonicalDatabase: CANONICAL_DB, summary, service }, null, 2)); } catch (error) { console.error(error instanceof Error ? error.message : error); process.exitCode = 1; }

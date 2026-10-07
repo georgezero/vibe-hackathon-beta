@@ -1,0 +1,53 @@
+{
+  "schema": "vibe-hackathon-submission-v1",
+
+  "team": {
+    "name": "Your Team Name",
+    "contact_email": "team@example.com",
+    "members": [
+      { "name": "Alice", "role": "Full-stack + AI" },
+      { "name": "Bob",   "role": "Design + prompting" }
+    ],
+    "github_org": "your-github-org"
+  },
+
+  "project": {
+    "name": "Your Project Title",
+    "summary": "One to three sentences describing the problem you solved and how your AI-assisted approach addresses it.",
+    "demo_url": "https://your-project.vercel.app",
+    "github_url": "https://github.com/your-org/your-repo",
+    "screenshot_url": "https://your-project.vercel.app/screenshot.png",
+    "target_users": ["radiologists", "medical imaging teams"],
+    "tags": ["medical imaging", "AI", "developer tools"]
+  },
+
+  "repo": {
+    "license": "MIT",
+    "agents_md_url": "https://github.com/your-org/your-repo/blob/main/AGENTS.md",
+    "readme_url": "https://github.com/your-org/your-repo/blob/main/README.md",
+    "env_example": "https://github.com/your-org/your-repo/blob/main/.env.example",
+    "install": "npm install",
+    "run": "npm run dev",
+    "test": "npm test",
+    "sample_data": "20 synthetic patient records seeded via `npm run db:seed`. No real PII used."
+  },
+
+  "agentic_dev": {
+    "harnesses": ["Claude Code", "Cursor"],
+    "models": ["claude-opus-4-5", "claude-sonnet-4-5"],
+    "local_models": [],
+    "budget_tier": "api_10_to_50",
+
+    "estimated_human_hours": 12,
+    "estimated_agent_hours": 48,
+
+    "estimated_tokens": 4200000,
+    "token_estimate_method": "provider_dashboard",
+    "metadata_confidence": "medium",
+    "analytics_notes": "Token count from Anthropic console usage report for project workspace. Does not include local Cursor usage.",
+
+    "prompt_notes_url": "https://github.com/your-org/your-repo/blob/main/docs/prompts.md",
+    "agent_report_url": "https://github.com/your-org/your-repo/blob/main/docs/agent-report.md",
+    "known_limitations": "Only supports English. Demo may be slow on cold start."
+  }
+}

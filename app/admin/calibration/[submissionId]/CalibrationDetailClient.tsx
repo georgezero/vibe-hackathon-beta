@@ -1,0 +1,33 @@
+"use client";
+
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useState, useTransition } from "react";
+
+type Detail = Awaited<ReturnType<typeof import("@/lib/calibration").getCalibrationSubmissionDetail>>;
+const label = (value: string) => value.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+const consensusLabel = (value: string) => value === "complete" ? "Consensus complete" : label(value);
+
+export default function CalibrationDetailClient({ detail }: { detail: NonNullable<Detail> }) {
+  const router = useRouter();
+  const [pending, startTransition] = useTransition();
+  const [note, setNote] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const operate = (operation: string, extra: Record<string, unknown> = {}) => startTransition(async () => {
+    setError(null);
+    const response = await fetch("/api/admin/calibration", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ operation, submissionId: detail.row.submissionId, ...extra }) });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) { setError(typeof result.error === "string" ? result.error : "Operation failed."); return; }
+    setNote(""); router.refresh();
+  });
+  const current = detail.consensus?.status ?? detail.row.consensusStatus;
+  return <>
+    <header className="calibration-detail-header"><div><Link className="calibration-back" href="/admin/calibration">← Calibration</Link><p className="eyebrow">Consensus review</p><h1>{detail.project.title}</h1><p>{detail.project.team} · {detail.project.state}</p></div><span className={`calibration-chip ${current === "complete" ? "success" : "warning"}`}>{consensusLabel(current)}</span></header>
+    <section className="calibration-detail-grid"><div className="calibration-detail-card"><p className="eyebrow">Project signal</p><div className="calibration-detail-stats"><div><span>Rank</span><strong>{detail.row.rank ?? "—"}</strong></div><div><span>Average</span><strong>{detail.row.average ?? "—"}</strong></div><div><span>Variance</span><strong>{detail.row.variance ?? "—"}</strong></div><div><span>Reviews</span><strong>{detail.row.completed}/{detail.row.required}</strong></div></div><p className="calibration-muted">Completed evaluations are advisory evidence only. Private note contents remain private.</p></div><div className="calibration-detail-card"><p className="eyebrow">Consensus controls</p><div className="calibration-action-row">{!detail.consensus && <button className="calibration-button" disabled={pending} onClick={() => operate("start_consensus")}>Start review</button>}{detail.consensus && detail.consensus.status !== "complete" && <button className="calibration-button" disabled={pending} onClick={() => operate("complete_consensus")}>Mark complete</button>}{detail.consensus?.status === "complete" && <button className="calibration-button secondary" disabled={pending} onClick={() => { const reason = window.prompt("Why reopen this consensus review?"); if (reason) operate("reopen_consensus", { reason }); }}>Reopen</button>}{detail.consensus && <button className="calibration-button secondary" disabled={pending} onClick={() => { const reason = window.prompt("Why flag this review?"); if (reason) operate("flag_consensus", { reason }); }}>Flag</button>}</div>{detail.consensus?.flaggedReason && <p className="calibration-callout">Flagged: {detail.consensus.flaggedReason}</p>}</div></section>
+    {error && <p className="calibration-error" role="alert">{error}</p>}
+    <section className="calibration-section"><div className="calibration-section-heading"><div><p className="eyebrow">Criterion comparison</p><h2>Where scores converge</h2></div></div><div className="calibration-table-wrap"><table className="calibration-table"><thead><tr><th>Criterion</th><th>Average</th><th>Minimum</th><th>Maximum</th><th>Variance</th></tr></thead><tbody>{detail.criterionBreakdown.map((criterion) => <tr key={criterion.key}><td data-label="Criterion"><strong>{criterion.label}</strong></td><td data-label="Average">{criterion.average ?? "—"}</td><td data-label="Minimum">{criterion.minimum ?? "—"}</td><td data-label="Maximum">{criterion.maximum ?? "—"}</td><td data-label="Variance">{criterion.variance ?? "—"}</td></tr>)}</tbody></table></div></section>
+    <section className="calibration-section"><div className="calibration-section-heading"><div><p className="eyebrow">Judge comparison</p><h2>Completed evaluations</h2></div></div><div className="calibration-table-wrap"><table className="calibration-table"><thead><tr><th>Judge</th><th>Overall</th><th>Updated</th><th>Private notes</th></tr></thead><tbody>{detail.evaluations.map((evaluation) => <tr key={evaluation.judgeId}><td data-label="Judge"><strong>{evaluation.judgeName}</strong></td><td data-label="Overall">{evaluation.score}</td><td data-label="Updated">{evaluation.updatedAt ? new Date(evaluation.updatedAt).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) : "—"}</td><td data-label="Private notes">{evaluation.privateNoteCount}</td></tr>)}</tbody></table>{detail.evaluations.length === 0 && <p className="calibration-empty-inline">No completed evaluations to compare.</p>}</div></section>
+    <section className="calibration-section"><div className="calibration-section-heading"><div><p className="eyebrow">Discussion</p><h2>Record a bounded consensus note</h2></div></div><textarea className="calibration-note" value={note} onChange={(event) => setNote(event.target.value)} maxLength={1000} placeholder="Capture the discussion outcome without copying private judge notes." /><div className="calibration-action-row"><button className="calibration-button" disabled={pending || !note.trim() || !detail.consensus} onClick={() => operate("add_consensus_note", { note })}>Add note</button><span className="calibration-muted">{detail.consensus?.discussion ? "A discussion note is recorded." : "No discussion note recorded."}</span></div></section>
+    {detail.outliers.length > 0 && <section className="calibration-section"><div className="calibration-section-heading"><div><p className="eyebrow">Advisory signal</p><h2>Statistical outliers</h2></div></div><ul className="calibration-list">{detail.outliers.map((item, index) => <li key={`${item.judgeId}-${item.criterion}-${index}`}><div><strong>{item.judgeName}</strong><span>{item.criterion} · {item.difference} point difference · overall deviation {item.overallDeviation}</span></div><span className="calibration-chip warning">Discuss</span></li>)}</ul></section>}
+  </>;
+}

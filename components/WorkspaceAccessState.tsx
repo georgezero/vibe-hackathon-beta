@@ -1,0 +1,7 @@
+import Link from "next/link";
+
+export function WorkspaceAccessState({ status, submissionId, resource = "workspace" }: { status: string; submissionId: string; resource?: "workspace" | "messages" }) {
+  const signedOut = status === "unauthenticated";
+  const messages = resource === "messages";
+  return <div className="min-h-screen"><main className="mx-auto max-w-2xl px-4 py-16"><section className="card" style={{ padding: "1.6rem" }}><span className="badge badge-warning">Private {messages ? "team room" : "workspace"}</span><h1 style={{ fontFamily: "var(--font-headline)", color: "var(--color-fg)", fontSize: "2rem", marginTop: "0.75rem" }}>{signedOut ? (messages ? "Sign in to view messages" : "Sign in to open this workspace") : (messages ? "This team room is private" : "This workspace is private")}</h1><p style={{ color: "var(--color-muted)", lineHeight: 1.6, margin: "0.7rem 0 1.2rem" }}>{signedOut ? (messages ? "Only active submission members can view team messages." : "Only active submission members can view project workspaces.") : "An explicit active owner or teammate membership is required. Roster email matches and application roles do not grant access."}</p>{signedOut ? <Link className="btn-primary" href={`/login?returnTo=${encodeURIComponent(`/projects/${submissionId}${messages ? "/messages" : ""}`)}`}>Sign in</Link> : <Link className="btn-secondary" href="/account/projects">Back to My Projects</Link>}</section></main></div>;
+}
